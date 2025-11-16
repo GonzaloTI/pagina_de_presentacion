@@ -32,16 +32,11 @@ app.get('/', (req, res) => {
 // 4. Definir la ruta para el archivo de verificación de TikTok
 //    Cuando TikTok visite https://.../tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt
 //    esta función se ejecutará.
-app.get('/tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt', (req, res) => {
+
+app.get('/tiktokSTo4Zh8BLznHPQSovtA1HMDm3wsa26Af.txt', (req, res) => {
   // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
   res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
 });
-
-app.get('/tiktokHqlbRj0K0lBlS6Nq8gbrPL2pSBS9wIHI.txt', (req, res) => {
-  // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
-  res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
-});
-
 
 //
 // ==========================================================
