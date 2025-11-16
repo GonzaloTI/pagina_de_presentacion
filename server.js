@@ -35,7 +35,7 @@ app.get('/', (req, res) => {
 
 app.get('/tiktokSTo4Zh8BLznHPQSovtA1HMDm3wsa26Af.txt', (req, res) => {
   // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
-  res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
+  res.sendFile(path.join(__dirname, 'tiktokSTo4Zh8BLznHPQSovtA1HMDm3wsa26Af.txt'));
 });
 
 //
