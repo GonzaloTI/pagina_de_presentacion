@@ -103,6 +103,7 @@ app.get("/callback", async (req, res) => {
 // =========================
 
 // Ruta para subir video
+// Ruta para subir video
 app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   const access_token = req.body.access_token;
   const videoPath = req.file.path;
@@ -110,6 +111,11 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   try {
     const videoStats = fs.statSync(videoPath);
     const videoSize = videoStats.size;
+
+    // Ajustar chunk_size a múltiplo de 256 KB
+    let chunkSize = 10_000_000; // 10 MB
+    chunkSize = Math.ceil(chunkSize / 262144) * 262144; // múltiplo de 256 KB
+    const totalChunks = Math.ceil(videoSize / chunkSize);
 
     // 1️⃣ Inicializar subida en TikTok
     const initResponse = await axios.post(
@@ -126,8 +132,8 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
         source_info: {
           source: "FILE_UPLOAD",
           video_size: videoSize,
-          chunk_size: 10000000, // 10 MB por chunk
-          total_chunk_count: Math.ceil(videoSize / 10000000)
+          chunk_size: chunkSize,
+          total_chunk_count: totalChunks
         }
       },
       {
@@ -140,30 +146,42 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
 
     const { upload_url, publish_id } = initResponse.data.data;
 
-    // 2️⃣ Subir el video completo (si es muy grande, hay que hacerlo por chunks)
-    const videoFile = fs.createReadStream(videoPath);
-    await axios.put(upload_url, videoFile, {
-      headers: { "Content-Type": "application/octet-stream" },
-    });
+    // 2️⃣ Subir video por chunks
+    const videoBuffer = fs.readFileSync(videoPath);
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, videoSize);
+      const chunk = videoBuffer.slice(start, end);
+
+      await axios.put(upload_url, chunk, {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`
+        }
+      });
+    }
 
     res.send(`
       <h2>Video subido correctamente</h2>
       <p>Publish ID: ${publish_id}</p>
       <p>URL de subida: ${upload_url}</p>
+      <p>Total chunks subidos: ${totalChunks}</p>
     `);
+
   } catch (error) {
-  console.error(error);
+    console.error(error);
 
-  let errorData = {
-    message: error.message,
-    status: error.response?.status,
-    statusText: error.response?.statusText,
-    headers: error.response?.headers,
-    data: error.response?.data
-  };
+    const errorData = {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      headers: error.response?.headers,
+      data: error.response?.data
+    };
 
-  res.send(`<h2>Error subiendo video</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
-} finally {
+    res.send(`<h2>Error subiendo video</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
+
+  } finally {
     fs.unlinkSync(videoPath);
   }
 });
