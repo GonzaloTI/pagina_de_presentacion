@@ -56,7 +56,10 @@ app.get("/callback", async (req, res) => {
   }
 
   try {
-    // 3. Cambio code → access_token
+    // 1. Mostrar todo lo que llega en la query (por ejemplo ?code=XYZ&state=ABC)
+    const queryData = JSON.stringify(req.query, null, 2);
+
+    // 2. Intercambiar code por access_token
     const response = await axios.post(
       "https://open.tiktokapis.com/v2/oauth/token/",
       {
@@ -68,24 +71,26 @@ app.get("/callback", async (req, res) => {
       }
     );
 
-    const access_token = response.data.access_token;
-    const refresh_token = response.data.refresh_token;
+    // 3. Mostrar toda la respuesta de TikTok
+    const responseData = JSON.stringify(response.data, null, 2);
 
     res.send(`
-      <h2>Tokens obtenidos</h2>
-      <p><strong>Access Token:</strong> ${access_token}</p>
-      <p><strong>Refresh Token:</strong> ${refresh_token}</p>
+      <h2>Datos de la query recibida</h2>
+      <pre>${queryData}</pre>
+
+      <h2>Respuesta completa de TikTok</h2>
+      <pre>${responseData}</pre>
 
       <h3>Subir video</h3>
       <form action="/uploadVideo" method="POST" enctype="multipart/form-data">
-        <input type="hidden" name="access_token" value="${access_token}">
+        <input type="hidden" name="access_token" value="${response.data.access_token}">
         <input type="file" name="video">
         <button type="submit">Subir video a TikTok</button>
       </form>
     `);
   } catch (error) {
     console.error(error?.response?.data || error);
-    res.send("Error obteniendo token.");
+    res.send(`<h2>Error obteniendo token</h2><pre>${JSON.stringify(error?.response?.data || error, null, 2)}</pre>`);
   }
 });
 
