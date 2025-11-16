@@ -126,8 +126,8 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
         source_info: {
           source: "FILE_UPLOAD",
           video_size: videoSize,
-          chunk_size: 10_000_000, // 10 MB por chunk
-          total_chunk_count: Math.ceil(videoSize / 10_000_000)
+          chunk_size: 10000000, // 10 MB por chunk
+          total_chunk_count: Math.ceil(videoSize / 10000000)
         }
       },
       {
