@@ -101,37 +101,61 @@ app.get("/callback", async (req, res) => {
 // =========================
 // 4. Subida del video
 // =========================
+
+// Ruta para subir video
 app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   const access_token = req.body.access_token;
   const videoPath = req.file.path;
 
   try {
-    const videoFile = fs.createReadStream(videoPath);
+    const videoStats = fs.statSync(videoPath);
+    const videoSize = videoStats.size;
 
-    const formData = new FormData();
-    formData.append("video", videoFile);
-
-    const response = await axios.post(
-      "https://open.tiktokapis.com/v2/video/upload/",
-      formData,
+    // 1️⃣ Inicializar subida en TikTok
+    const initResponse = await axios.post(
+      "https://open.tiktokapis.com/v2/post/publish/video/init/",
+      {
+        post_info: {
+          title: "Video subido desde mi app Node.js",
+          privacy_level: "PUBLIC",
+          disable_duet: false,
+          disable_comment: false,
+          disable_stitch: false,
+          video_cover_timestamp_ms: 0
+        },
+        source_info: {
+          source: "FILE_UPLOAD",
+          video_size: videoSize,
+          chunk_size: 10_000_000, // 10 MB por chunk
+          total_chunk_count: Math.ceil(videoSize / 10_000_000)
+        }
+      },
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
-          ...formData.getHeaders(),
+          "Content-Type": "application/json; charset=UTF-8",
         },
       }
     );
 
+    const { upload_url, publish_id } = initResponse.data.data;
+
+    // 2️⃣ Subir el video completo (si es muy grande, hay que hacerlo por chunks)
+    const videoFile = fs.createReadStream(videoPath);
+    await axios.put(upload_url, videoFile, {
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+
     res.send(`
       <h2>Video subido correctamente</h2>
-      <p>Respuesta TikTok:</p>
-      <pre>${JSON.stringify(response.data, null, 2)}</pre>
+      <p>Publish ID: ${publish_id}</p>
+      <p>URL de subida: ${upload_url}</p>
     `);
   } catch (error) {
     console.error(error);
 
-    // Mostrar el error crudo de manera detallada
-    let errorData = {
+    // Mostrar error crudo completo
+    const errorData = {
       message: error.message,
       response: error.response ? {
         status: error.response.status,
@@ -147,7 +171,6 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     fs.unlinkSync(videoPath);
   }
 });
-
 
 // =========================
 app.get("/login", (req, res) => {
