@@ -152,22 +152,18 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       <p>URL de subida: ${upload_url}</p>
     `);
   } catch (error) {
-    console.error(error);
+  console.error(error);
 
-    // Mostrar error crudo completo
-    const errorData = {
-      message: error.message,
-      response: error.response ? {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        headers: error.response.headers,
-        data: error.response.data
-      } : null,
-      request: error.request ? error.request : null
-    };
+  let errorData = {
+    message: error.message,
+    status: error.response?.status,
+    statusText: error.response?.statusText,
+    headers: error.response?.headers,
+    data: error.response?.data
+  };
 
-    res.send(`<h2>Error subiendo video (crudo)</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
-  } finally {
+  res.send(`<h2>Error subiendo video</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
+} finally {
     fs.unlinkSync(videoPath);
   }
 });
