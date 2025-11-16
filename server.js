@@ -36,6 +36,13 @@ app.get('/tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt', (req, res) => {
   // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
   res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
 });
+
+app.get('/tiktokHqlbRj0K0lBlS6Nq8gbrPL2pSBS9wIHI.txt', (req, res) => {
+  // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
+  res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
+});
+
+
 //
 // ==========================================================
 // ===== FIN DE CÓDIGO NUEVO                                =====
