@@ -113,7 +113,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     const videoSize = videoStats.size;
 
     // Ajustar chunk_size a múltiplo de 256 KB
-    const chunkSize = 10 * 1024 * 1024; // 10 MB
+    let chunkSize = 10 * 1024 * 1024; // 10 MB
     chunkSize = Math.ceil(chunkSize / 262144) * 262144; // múltiplo de 256 KB
     const totalChunks = Math.ceil(videoSize / chunkSize);
 
