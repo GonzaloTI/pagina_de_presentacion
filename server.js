@@ -169,11 +169,14 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
 });
 
 // =========================
+// app.get("/login", (req, res) => {
+//   const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${CLIENT_KEY}&scope=video.upload&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+//   res.redirect(authUrl);
+// });
 app.get("/login", (req, res) => {
-  const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${CLIENT_KEY}&scope=video.upload&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${CLIENT_KEY}&scope=video.upload,video.publish,user.info.basic&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   res.redirect(authUrl);
 });
-
 
 
 
