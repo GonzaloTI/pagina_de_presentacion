@@ -5,6 +5,7 @@ const path = require('path'); // 'path' nos ayuda a manejar rutas de archivos
 const axios = require("axios");
 const multer = require("multer");
 const fs = require("fs");
+const cors = require("cors");
 
 const CLIENT_KEY = "sbaw2puy6r6vy609uj";
 const CLIENT_SECRET = "voe6l33ALPpZw0cEbwX2cW0Asc0NO33U";
@@ -16,7 +17,7 @@ const upload = multer({ dest: "uploads/" });
 // 2. Crear la aplicación de Express
 const app = express();
 const port = 3000; // El puerto donde correrá el servidor
-
+app.use(cors());
 // 3. Definir la ruta principal
 // Cuando alguien entre a 'http://localhost:3000/'
 app.get('/', (req, res) => {
