@@ -101,7 +101,6 @@ app.get("/callback", async (req, res) => {
 // =========================
 // 4. Subida del video
 // =========================
-
 app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   const access_token = req.body.access_token;
   const videoPath = req.file.path;
@@ -118,7 +117,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
-          ...formData.getHeaders(), // esto incluye el content-type correcto con boundary
+          ...formData.getHeaders(),
         },
       }
     );
@@ -129,12 +128,26 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       <pre>${JSON.stringify(response.data, null, 2)}</pre>
     `);
   } catch (error) {
-    console.error(error?.response?.data || error);
-    res.send(`<h2>Error subiendo video</h2><pre>${JSON.stringify(error?.response?.data || error, null, 2)}</pre>`);
+    console.error(error);
+
+    // Mostrar el error crudo de manera detallada
+    let errorData = {
+      message: error.message,
+      response: error.response ? {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        headers: error.response.headers,
+        data: error.response.data
+      } : null,
+      request: error.request ? error.request : null
+    };
+
+    res.send(`<h2>Error subiendo video (crudo)</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
   } finally {
     fs.unlinkSync(videoPath);
   }
 });
+
 
 // =========================
 app.get("/login", (req, res) => {
