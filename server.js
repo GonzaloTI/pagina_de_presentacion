@@ -14,6 +14,22 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// ==========================================================
+// ===== INICIO DE CÓDIGO NUEVO (Paso de Verificación) =====
+// ==========================================================
+//
+// 4. Definir la ruta para el archivo de verificación de TikTok
+//    Cuando TikTok visite https://.../tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt
+//    esta función se ejecutará.
+app.get('/tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt', (req, res) => {
+  // Simplemente le decimos que envíe el archivo que creamos en el Paso 1
+  res.sendFile(path.join(__dirname, 'tiktokLslYtfl0tYEZ9a3qbZ1qse09uGg2diQQ.txt'));
+});
+//
+// ==========================================================
+// ===== FIN DE CÓDIGO NUEVO                                =====
+// ==========================================================
+
 // 4. Iniciar el servidor
 app.listen(port, () => {
   console.log(`¡Servidor corriendo en http://localhost:${port}`);
