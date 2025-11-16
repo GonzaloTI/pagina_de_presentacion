@@ -1,7 +1,7 @@
 // 1. Importar los módulos necesarios
 const express = require('express');
 const path = require('path'); // 'path' nos ayuda a manejar rutas de archivos
-
+const FormData = require("form-data");
 const axios = require("axios");
 const multer = require("multer");
 const fs = require("fs");
@@ -101,6 +101,7 @@ app.get("/callback", async (req, res) => {
 // =========================
 // 4. Subida del video
 // =========================
+
 app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   const access_token = req.body.access_token;
   const videoPath = req.file.path;
@@ -108,15 +109,16 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   try {
     const videoFile = fs.createReadStream(videoPath);
 
+    const formData = new FormData();
+    formData.append("video", videoFile);
+
     const response = await axios.post(
       "https://open.tiktokapis.com/v2/video/upload/",
-      {
-        video: videoFile,
-      },
+      formData,
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
-          "Content-Type": "multipart/form-data",
+          ...formData.getHeaders(), // esto incluye el content-type correcto con boundary
         },
       }
     );
@@ -128,7 +130,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     `);
   } catch (error) {
     console.error(error?.response?.data || error);
-    res.send("Error subiendo video.");
+    res.send(`<h2>Error subiendo video</h2><pre>${JSON.stringify(error?.response?.data || error, null, 2)}</pre>`);
   } finally {
     fs.unlinkSync(videoPath);
   }
