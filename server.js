@@ -57,6 +57,7 @@ app.get("/callback", async (req, res) => {
 
   try {
     // 1. Mostrar todo lo que llega en la query (por ejemplo ?code=XYZ&state=ABC)
+    const queryData = JSON.stringify(req.query, null, 2);
     const params = qs.stringify({
       client_key: CLIENT_KEY,
       client_secret: CLIENT_SECRET,
@@ -75,7 +76,6 @@ app.get("/callback", async (req, res) => {
       }
     );
 
-    const queryData = JSON.stringify(req.query, null, 2);
     const responseData = JSON.stringify(response.data, null, 2);
     res.send(`
       <h2>Datos de la query recibida</h2>
