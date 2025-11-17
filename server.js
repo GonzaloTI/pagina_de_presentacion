@@ -112,32 +112,39 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     const videoStats = fs.statSync(videoPath);
     const videoSize = videoStats.size;
 
-    const MIN_CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
-    const MAX_CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB
-    const OPTIMAL_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
-
     // ⚠️ REGLAS DE TIKTOK SEGÚN DOCUMENTACIÓN OFICIAL:
     // 1. Videos ≤64MB: chunk_size = video_size, total_chunk_count = 1
     // 2. Videos >64MB: dividir en chunks de 10MB usando Math.ceil
 
 let chunkSize;
-let totalChunks;
+    let totalChunks;
 
-if (videoSize <= 64 * 1024 * 1024) {
-  // Un solo chunk
-  chunkSize = videoSize;
-  totalChunks = 1;
-     console.log(`📹 Video: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo (1 chunk).`);
- 
-} else {
-  // Chunk REAL de 10MB
-  chunkSize = 20 * 1024 * 1024; 
-  totalChunks = Math.ceil(videoSize / chunkSize);
-       console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
+    // Usaremos 20 MiB como chunk base para archivos grandes
+    const CHUNK_BASE_SIZE = 20 * 1024 * 1024; // 20 MiB
 
-}
+    if (videoSize <= 5 * 1024 * 1024) {
+      // Regla 1: Video muy pequeño, subir en 1 chunk
+      chunkSize = videoSize;
+      totalChunks = 1;
+      console.log(`📹 Video: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo (1 chunk).`);
 
+    } else {
+      // Video mediano o grande, dividir en chunks
+      chunkSize = CHUNK_BASE_SIZE; // 20 MiB
 
+      // ⚠️ 1. CAMBIO PRINCIPAL: Usar Math.floor (redondear hacia abajo)
+      // Esta es la regla de la documentación que encontramos.
+      totalChunks = Math.floor(videoSize / chunkSize);
+      
+      console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
+    }
+
+// Manejar el caso de videos entre 5MB y 20MB (donde Math.floor daría 0)
+    if (totalChunks === 0 && videoSize > 0) {
+        totalChunks = 1;
+        chunkSize = videoSize;
+        console.log(`ℹ️ Ajuste: Video mediano, subiendo como 1 chunk de ${videoSize} bytes`);
+    }
     console.log(`📊 Video size: ${videoSize} bytes`);
     console.log(`📦 Chunk size: ${chunkSize} bytes`);
     console.log(`🔢 Total chunks: ${totalChunks}`);
@@ -180,7 +187,12 @@ if (videoSize <= 64 * 1024 * 1024) {
     
     for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, videoSize);
+
+      // ⚠️ 2. CAMBIO IMPORTANTE EN EL BUCLE:
+      // Si es el último chunk (i === totalChunks - 1), debe tomar TODO el resto del archivo.
+      // Si no, simplemente toma el tamaño del chunk.
+      const end = (i === totalChunks - 1) ? videoSize : (start + chunkSize);
+
       const chunk = videoBuffer.slice(start, end);
 
       console.log(`\n📤 Preparando chunk ${i + 1}/${totalChunks}:`);
@@ -208,7 +220,7 @@ if (videoSize <= 64 * 1024 * 1024) {
             timeout: 630000, // 6 minutos por chunk
             validateStatus: (status) => {
               // TikTok puede devolver 200, 201 o 204 como éxito
-              return status >= 200 && status < 300;
+               return status === 206 || status === 201 || status === 200;
             }
           });
 
