@@ -112,13 +112,38 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     const videoStats = fs.statSync(videoPath);
     const videoSize = videoStats.size;
 
-    // ⚠️ IMPORTANTE: TikTok requiere chunk_size EXACTAMENTE 10 MB
-    const chunkSize = 10 * 1024 * 1024; // 10485760 bytes (10 MB exactos)
-    const totalChunks = Math.ceil(videoSize / chunkSize);
+    const MIN_CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
+    const MAX_CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB
 
-    console.log(`Video size: ${videoSize} bytes`);
-    console.log(`Chunk size: ${chunkSize} bytes`);
-    console.log(`Total chunks: ${totalChunks}`);
+    let chunkSize;
+    let totalChunks;
+
+    // ⚠️ REGLA CRÍTICA DE TIKTOK:
+    // Videos < 5MB DEBEN subirse completos (chunk_size = video_size, total_chunks = 1)
+    // Videos >= 5MB deben usar chunks entre 5MB y 64MB
+    if (videoSize < MIN_CHUNK_SIZE) {
+      // Video pequeño: subir completo
+      chunkSize = videoSize;
+      totalChunks = 1;
+      console.log(`📹 Video pequeño detectado (${videoSize} bytes). Subiendo completo.`);
+    } else {
+      // Video grande: usar chunks de tamaño apropiado
+      // Si el video es menor a 64MB, usar el tamaño del video como chunk
+      // Si es mayor, usar chunks de 64MB (o un tamaño que divida uniformemente)
+      if (videoSize <= MAX_CHUNK_SIZE) {
+        chunkSize = videoSize;
+        totalChunks = 1;
+      } else {
+        // Para videos muy grandes, usar chunks de 10MB (valor seguro)
+        chunkSize = 10 * 1024 * 1024; // 10 MB
+        totalChunks = Math.ceil(videoSize / chunkSize);
+      }
+      console.log(`📹 Video grande detectado (${videoSize} bytes). Usando chunks.`);
+    }
+
+    console.log(`📊 Video size: ${videoSize} bytes (${(videoSize / (1024 * 1024)).toFixed(2)} MB)`);
+    console.log(`📦 Chunk size: ${chunkSize} bytes (${(chunkSize / (1024 * 1024)).toFixed(2)} MB)`);
+    console.log(`🔢 Total chunks: ${totalChunks}`);
 
     // 1️⃣ Inicializar subida en TikTok
     const initResponse = await axios.post(
@@ -126,7 +151,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       {
         post_info: {
           title: "Video subido desde mi app Node.js",
-          privacy_level: "SELF_ONLY", // Cambiado a SELF_ONLY para pruebas
+          privacy_level: "SELF_ONLY",
           disable_duet: false,
           disable_comment: false,
           disable_stitch: false,
@@ -148,8 +173,8 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     );
 
     const { upload_url, publish_id } = initResponse.data.data;
-    console.log(`Upload URL obtenida: ${upload_url}`);
-    console.log(`Publish ID: ${publish_id}`);
+    console.log(`✅ Init exitoso. Upload URL obtenida`);
+    console.log(`🆔 Publish ID: ${publish_id}`);
 
     // 2️⃣ Subir video por chunks
     const videoBuffer = fs.readFileSync(videoPath);
@@ -159,55 +184,64 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       const end = Math.min(start + chunkSize, videoSize);
       const chunk = videoBuffer.slice(start, end);
 
-      console.log(`Subiendo chunk ${i + 1}/${totalChunks}: bytes ${start}-${end - 1}/${videoSize}`);
+      console.log(`📤 Subiendo chunk ${i + 1}/${totalChunks}: bytes ${start}-${end - 1}/${videoSize}`);
 
       await axios.put(upload_url, chunk, {
         headers: {
           "Content-Type": "video/mp4",
           "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`,
           "Content-Length": chunk.length
-        }
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
       });
 
-      console.log(`Chunk ${i + 1} subido exitosamente`);
+      console.log(`✅ Chunk ${i + 1} subido exitosamente`);
     }
 
     res.send(`
-      <h2>✅ Video subido correctamente</h2>
-      <p><strong>Publish ID:</strong> ${publish_id}</p>
-      <p><strong>Tamaño del video:</strong> ${(videoSize / (1024 * 1024)).toFixed(2)} MB</p>
-      <p><strong>Total chunks subidos:</strong> ${totalChunks}</p>
-      <p><strong>Chunk size usado:</strong> ${(chunkSize / (1024 * 1024)).toFixed(2)} MB</p>
+      <h2>✅ Video subido correctamente a TikTok</h2>
+      <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <p><strong>🆔 Publish ID:</strong> <code>${publish_id}</code></p>
+        <p><strong>📦 Tamaño del video:</strong> ${(videoSize / (1024 * 1024)).toFixed(2)} MB</p>
+        <p><strong>🔢 Chunks subidos:</strong> ${totalChunks}</p>
+        <p><strong>📏 Tamaño de chunk:</strong> ${(chunkSize / (1024 * 1024)).toFixed(2)} MB</p>
+      </div>
+      <p>⏳ Tu video está siendo procesado por TikTok. Puede tardar unos minutos en aparecer en tu cuenta.</p>
       <hr>
-      <a href="/">Volver al inicio</a>
+      <a href="/" style="display: inline-block; padding: 10px 20px; background: #000; color: #fff; text-decoration: none; border-radius: 4px;">← Volver al inicio</a>
     `);
 
   } catch (error) {
-    console.error("Error completo:", error);
+    console.error("❌ Error completo:", error);
 
     const errorData = {
       message: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
-      config: {
+      requestData: {
         url: error.config?.url,
         method: error.config?.method,
-        headers: error.config?.headers
+        body: error.config?.data ? JSON.parse(error.config.data) : null
       }
     };
 
-    res.send(`<h2>❌ Error subiendo video</h2><pre>${JSON.stringify(errorData, null, 2)}</pre>`);
+    res.send(`
+      <h2>❌ Error subiendo video</h2>
+      <pre style="background: #ffebee; padding: 15px; border-radius: 8px; overflow-x: auto;">${JSON.stringify(errorData, null, 2)}</pre>
+      <hr>
+      <a href="/">← Volver al inicio</a>
+    `);
 
   } finally {
     // Limpiar archivo temporal
     if (fs.existsSync(videoPath)) {
       fs.unlinkSync(videoPath);
-      console.log("Archivo temporal eliminado");
+      console.log("🗑️ Archivo temporal eliminado");
     }
   }
 });
-
 // =========================
 // app.get("/login", (req, res) => {
 //   const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${CLIENT_KEY}&scope=video.upload&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
