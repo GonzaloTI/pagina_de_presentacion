@@ -119,24 +119,22 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     // ⚠️ REGLAS DE TIKTOK SEGÚN DOCUMENTACIÓN OFICIAL:
     // 1. Videos ≤64MB: chunk_size = video_size, total_chunk_count = 1
     // 2. Videos >64MB: dividir en chunks de 10MB usando Math.ceil
-    
-const CHUNK_SIZE = 262144 * 40; // 10,485,760 bytes EXACTO (válido para TikTok)
 
 let chunkSize;
 let totalChunks;
 
 if (videoSize <= 64 * 1024 * 1024) {
-  // Videos pequeños (≤64MB)
+  // Un solo chunk
   chunkSize = videoSize;
   totalChunks = 1;
-       console.log(`📹 Video: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo (1 chunk).`);
+     console.log(`📹 Video: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo (1 chunk).`);
  
 } else {
-  // Videos grandes (>64MB)
-  chunkSize = CHUNK_SIZE;
+  // Chunk REAL de 10MB
+  chunkSize = 10 * 1024 * 1024; 
   totalChunks = Math.ceil(videoSize / chunkSize);
-     console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
-   
+       console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
+
 }
 
 
