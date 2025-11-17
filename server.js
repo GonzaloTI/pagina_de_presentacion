@@ -205,7 +205,7 @@ if (videoSize <= 64 * 1024 * 1024) {
             },
             maxBodyLength: Infinity,
             maxContentLength: Infinity,
-            timeout: 180000, // 3 minutos por chunk
+            timeout: 630000, // 6 minutos por chunk
             validateStatus: (status) => {
               // TikTok puede devolver 200, 201 o 204 como éxito
               return status >= 200 && status < 300;
