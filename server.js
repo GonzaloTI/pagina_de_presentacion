@@ -131,7 +131,7 @@ if (videoSize <= 64 * 1024 * 1024) {
  
 } else {
   // Chunk REAL de 10MB
-  chunkSize = 10 * 1024 * 1024; 
+  chunkSize = 20 * 1024 * 1024; 
   totalChunks = Math.ceil(videoSize / chunkSize);
        console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
 
