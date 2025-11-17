@@ -114,50 +114,34 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
 
     const MIN_CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
     const MAX_CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB
-    const PREFERRED_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
     let chunkSize;
     let totalChunks;
 
     // ⚠️ REGLA CRÍTICA DE TIKTOK:
     // - Videos < 5MB: subir completo (chunk_size = video_size, total_chunks = 1)
-    // - Videos >= 5MB: chunks entre 5MB y 64MB
-    // - total_chunk_count debe ser EXACTO (no redondeado hacia arriba si sobran bytes)
+    // - Videos >= 5MB y <= 64MB: subir completo en 1 chunk
+    // - Videos > 64MB: dividir en chunks de 5-64MB
     
-    if (videoSize < MIN_CHUNK_SIZE) {
-      // Video pequeño: subir completo
+    if (videoSize <= MAX_CHUNK_SIZE) {
+      // Videos hasta 64MB: subir completo
       chunkSize = videoSize;
       totalChunks = 1;
-      console.log(`📹 Video pequeño detectado (${videoSize} bytes). Subiendo completo.`);
-    } else if (videoSize <= MAX_CHUNK_SIZE) {
-      // Video mediano (5MB-64MB): subir en un solo chunk
-      chunkSize = videoSize;
-      totalChunks = 1;
-      console.log(`📹 Video mediano detectado (${videoSize} bytes). Subiendo en 1 chunk.`);
+      console.log(`📹 Video detectado: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo.`);
     } else {
-      // Video grande (>64MB): dividir en chunks
-      // Calcular chunks de forma que el último no sea muy pequeño
-      const idealChunks = Math.ceil(videoSize / PREFERRED_CHUNK_SIZE);
+      // Videos grandes (>64MB): dividir en chunks
+      // Usar chunks de 10MB es seguro y eficiente
+      chunkSize = 10 * 1024 * 1024; // 10 MB exactos
       
-      // Ajustar chunk_size para que divida mejor el video
-      chunkSize = Math.ceil(videoSize / idealChunks);
-      
-      // Asegurar que chunk_size esté en el rango permitido
-      if (chunkSize < MIN_CHUNK_SIZE) {
-        chunkSize = MIN_CHUNK_SIZE;
-      } else if (chunkSize > MAX_CHUNK_SIZE) {
-        chunkSize = MAX_CHUNK_SIZE;
-      }
-      
-      // ⚠️ CRÍTICO: TikTok requiere Math.floor, NO Math.ceil
-      // El último chunk puede ser más grande para acomodar bytes restantes
+      // IMPORTANTE: TikTok usa Math.floor para calcular total_chunk_count
+      // El último chunk automáticamente incluye los bytes restantes
       totalChunks = Math.floor(videoSize / chunkSize);
       
-      console.log(`📹 Video grande detectado (${videoSize} bytes). Dividiendo en chunks.`);
+      console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en chunks.`);
     }
 
-    console.log(`📊 Video size: ${videoSize} bytes (${(videoSize / (1024 * 1024)).toFixed(2)} MB)`);
-    console.log(`📦 Chunk size: ${chunkSize} bytes (${(chunkSize / (1024 * 1024)).toFixed(2)} MB)`);
+    console.log(`📊 Video size: ${videoSize} bytes`);
+    console.log(`📦 Chunk size: ${chunkSize} bytes`);
     console.log(`🔢 Total chunks: ${totalChunks}`);
 
     // 1️⃣ Inicializar subida en TikTok
@@ -166,7 +150,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       {
         post_info: {
           title: "Video subido desde mi app Node.js",
-          privacy_level: "SELF_ONLY", // Solo tú (más seguro para pruebas)
+          privacy_level: "SELF_ONLY",
           disable_duet: false,
           disable_comment: false,
           disable_stitch: false,
@@ -194,14 +178,17 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     // 2️⃣ Subir video por chunks
     const videoBuffer = fs.readFileSync(videoPath);
     
-    for (let i = 0; i < totalChunks; i++) {
+    // CRÍTICO: El loop debe usar totalChunks + 1 para incluir el último chunk con bytes restantes
+    const actualChunks = totalChunks === 1 ? 1 : totalChunks + 1;
+    
+    for (let i = 0; i < actualChunks; i++) {
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize, videoSize);
       const chunk = videoBuffer.slice(start, end);
 
-      console.log(`📤 Subiendo chunk ${i + 1}/${totalChunks}: bytes ${start}-${end - 1}/${videoSize}`);
+      console.log(`📤 Subiendo chunk ${i + 1}/${actualChunks}: bytes ${start}-${end - 1}/${videoSize} (${chunk.length} bytes)`);
 
-      await axios.put(upload_url, chunk, {
+      const uploadResponse = await axios.put(upload_url, chunk, {
         headers: {
           "Content-Type": "video/mp4",
           "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`,
@@ -211,7 +198,7 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
         maxContentLength: Infinity
       });
 
-      console.log(`✅ Chunk ${i + 1} subido exitosamente`);
+      console.log(`✅ Chunk ${i + 1} subido: ${uploadResponse.status} ${uploadResponse.statusText}`);
     }
 
     res.send(`
@@ -219,7 +206,8 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
       <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <p><strong>🆔 Publish ID:</strong> <code>${publish_id}</code></p>
         <p><strong>📦 Tamaño del video:</strong> ${(videoSize / (1024 * 1024)).toFixed(2)} MB</p>
-        <p><strong>🔢 Chunks subidos:</strong> ${totalChunks}</p>
+        <p><strong>🔢 Chunks declarados a TikTok:</strong> ${totalChunks}</p>
+        <p><strong>📤 Chunks realmente subidos:</strong> ${actualChunks}</p>
         <p><strong>📏 Tamaño de chunk:</strong> ${(chunkSize / (1024 * 1024)).toFixed(2)} MB</p>
       </div>
       <p>⏳ Tu video está siendo procesado por TikTok. Puede tardar unos minutos en aparecer en tu cuenta.</p>
@@ -230,17 +218,23 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
   } catch (error) {
     console.error("❌ Error completo:", error);
 
-    const errorData = {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      requestData: {
-        url: error.config?.url,
-        method: error.config?.method,
-        body: error.config?.data ? JSON.parse(error.config.data) : null
-      }
-    };
+    let errorData;
+    try {
+      errorData = {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers,
+        requestData: error.config?.data ? `Buffer (${error.config.data.length} bytes)` : null,
+        url: error.config?.url
+      };
+    } catch (parseError) {
+      errorData = {
+        message: error.message,
+        stack: error.stack
+      };
+    }
 
     res.send(`
       <h2>❌ Error subiendo video</h2>
