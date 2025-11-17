@@ -88,7 +88,7 @@ app.get("/callback", async (req, res) => {
       <h3>Subir video</h3>
       <form action="/uploadVideo" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="access_token" value="${response.data.access_token}">
-        <input type="file" name="video">
+        <input type="file" name="video" accept="video/*">
         <button type="submit">Subir video a TikTok</button>
       </form>
     `);
