@@ -114,30 +114,26 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
 
     const MIN_CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
     const MAX_CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB
+    const OPTIMAL_CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
 
     let chunkSize;
     let totalChunks;
 
-    // ⚠️ REGLA CRÍTICA DE TIKTOK:
-    // - Videos < 5MB: subir completo (chunk_size = video_size, total_chunks = 1)
-    // - Videos >= 5MB y <= 64MB: subir completo en 1 chunk
-    // - Videos > 64MB: dividir en chunks de 5-64MB
+    // ⚠️ REGLAS DE TIKTOK SEGÚN DOCUMENTACIÓN OFICIAL:
+    // 1. Videos ≤64MB: chunk_size = video_size, total_chunk_count = 1
+    // 2. Videos >64MB: dividir en chunks de 10MB usando Math.ceil
     
     if (videoSize <= MAX_CHUNK_SIZE) {
-      // Videos hasta 64MB: subir completo
+      // Videos hasta 64MB: subir completo en 1 chunk
       chunkSize = videoSize;
       totalChunks = 1;
-      console.log(`📹 Video detectado: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo.`);
+      console.log(`📹 Video: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Subiendo completo (1 chunk).`);
     } else {
-      // Videos grandes (>64MB): dividir en chunks
-      // Usar chunks de 10MB es seguro y eficiente
-      chunkSize = 10 * 1024 * 1024; // 10 MB exactos
+      // Videos grandes (>64MB): dividir en chunks de 10MB
+      chunkSize = OPTIMAL_CHUNK_SIZE;
+      totalChunks = Math.ceil(videoSize / chunkSize);
       
-      // IMPORTANTE: TikTok usa Math.floor para calcular total_chunk_count
-      // El último chunk automáticamente incluye los bytes restantes
-      totalChunks = Math.floor(videoSize / chunkSize);
-      
-      console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en chunks.`);
+      console.log(`📹 Video grande: ${(videoSize / (1024 * 1024)).toFixed(2)} MB. Dividiendo en ${totalChunks} chunks.`);
     }
 
     console.log(`📊 Video size: ${videoSize} bytes`);
@@ -175,39 +171,96 @@ app.post("/uploadVideo", upload.single("video"), async (req, res) => {
     console.log(`✅ Init exitoso. Upload URL obtenida`);
     console.log(`🆔 Publish ID: ${publish_id}`);
 
-    // 2️⃣ Subir video por chunks
+    // 2️⃣ Subir video por chunks SECUENCIALMENTE con verificación
     const videoBuffer = fs.readFileSync(videoPath);
+    const MAX_RETRIES = 3;
+    let lastUploadedByte = -1; // Rastrea hasta dónde se subió exitosamente
     
-    // CRÍTICO: El loop debe usar totalChunks + 1 para incluir el último chunk con bytes restantes
-    const actualChunks = totalChunks === 1 ? 1 : totalChunks + 1;
-    
-    for (let i = 0; i < actualChunks; i++) {
+    for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize, videoSize);
       const chunk = videoBuffer.slice(start, end);
 
-      console.log(`📤 Subiendo chunk ${i + 1}/${actualChunks}: bytes ${start}-${end - 1}/${videoSize} (${chunk.length} bytes)`);
+      console.log(`\n📤 Preparando chunk ${i + 1}/${totalChunks}:`);
+      console.log(`   Range: bytes ${start}-${end - 1}/${videoSize}`);
+      console.log(`   Size: ${chunk.length} bytes (${(chunk.length / (1024 * 1024)).toFixed(2)} MB)`);
 
-      const uploadResponse = await axios.put(upload_url, chunk, {
-        headers: {
-          "Content-Type": "video/mp4",
-          "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`,
-          "Content-Length": chunk.length
-        },
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity
-      });
+      // Verificar que el chunk anterior se completó
+      if (lastUploadedByte >= 0 && start !== lastUploadedByte + 1) {
+        throw new Error(`❌ ERROR DE SECUENCIA: Se esperaba empezar en byte ${lastUploadedByte + 1}, pero se intentó empezar en ${start}`);
+      }
 
-      console.log(`✅ Chunk ${i + 1} subido: ${uploadResponse.status} ${uploadResponse.statusText}`);
+      let uploadSuccess = false;
+      let retryCount = 0;
+
+      while (!uploadSuccess && retryCount < MAX_RETRIES) {
+        try {
+          const uploadResponse = await axios.put(upload_url, chunk, {
+            headers: {
+              "Content-Type": "video/mp4",
+              "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`,
+              "Content-Length": chunk.length
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            timeout: 180000, // 3 minutos por chunk
+            validateStatus: (status) => {
+              // TikTok puede devolver 200, 201 o 204 como éxito
+              return status >= 200 && status < 300;
+            }
+          });
+
+          console.log(`✅ Chunk ${i + 1}/${totalChunks} subido exitosamente (status: ${uploadResponse.status})`);
+          
+          // Actualizar el último byte subido exitosamente
+          lastUploadedByte = end - 1;
+          uploadSuccess = true;
+
+          // Pequeña pausa entre chunks para evitar throttling
+          if (i < totalChunks - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500)); // 0.5 segundos
+          }
+
+        } catch (chunkError) {
+          retryCount++;
+          const serverRange = chunkError.response?.headers?.['content-range'];
+          const errorStatus = chunkError.response?.status;
+          
+          console.error(`❌ Error en chunk ${i + 1} (intento ${retryCount}/${MAX_RETRIES}):`, {
+            status: errorStatus,
+            statusText: chunkError.response?.statusText,
+            servidorRecibióHasta: serverRange,
+            intentamosEnviar: `bytes ${start}-${end - 1}/${videoSize}`,
+            errorCode: chunkError.code
+          });
+
+          // Si es error 416, el servidor rechazó el rango
+          if (errorStatus === 416) {
+            console.error(`💥 Error 416: El servidor no acepta este rango. Probablemente faltó un chunk anterior.`);
+            throw new Error(`El servidor solo recibió hasta: ${serverRange}. No se puede continuar con chunk ${i + 1}.`);
+          }
+
+          if (retryCount >= MAX_RETRIES) {
+            console.error(`💥 Chunk ${i + 1} falló después de ${MAX_RETRIES} intentos`);
+            throw new Error(`Falló la subida del chunk ${i + 1}/${totalChunks}. Error: ${chunkError.message}`);
+          }
+
+          // Esperar más tiempo antes de reintentar (backoff exponencial)
+          const waitTime = 2000 * retryCount; // 2s, 4s, 6s
+          console.log(`⏳ Esperando ${waitTime/1000} segundos antes de reintentar...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
     }
+
+    console.log(`\n🎉 ¡Todos los ${totalChunks} chunks subidos exitosamente!`);
 
     res.send(`
       <h2>✅ Video subido correctamente a TikTok</h2>
       <div style="background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 20px 0;">
         <p><strong>🆔 Publish ID:</strong> <code>${publish_id}</code></p>
         <p><strong>📦 Tamaño del video:</strong> ${(videoSize / (1024 * 1024)).toFixed(2)} MB</p>
-        <p><strong>🔢 Chunks declarados a TikTok:</strong> ${totalChunks}</p>
-        <p><strong>📤 Chunks realmente subidos:</strong> ${actualChunks}</p>
+        <p><strong>🔢 Total chunks subidos:</strong> ${totalChunks}</p>
         <p><strong>📏 Tamaño de chunk:</strong> ${(chunkSize / (1024 * 1024)).toFixed(2)} MB</p>
       </div>
       <p>⏳ Tu video está siendo procesado por TikTok. Puede tardar unos minutos en aparecer en tu cuenta.</p>
